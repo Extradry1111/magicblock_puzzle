@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.waves.min.js"></script>
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    VANTA.WAVES({
+      el: "body",
+      mouseControls: true,
+      touchControls: true,
+      gyroControls: false,
+      color: 0x6c00ff, // Фиолетовый
+      shininess: 50,
+      waveHeight: 20,
+      waveSpeed: 1.2,
+      zoom: 1
+    });
+  });
+</script>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MagicBlock Puzzle</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      background-color: #b3e5fc;
+      font-family: 'Orbitron', sans-serif;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+    .hidden {
+      display: none;
+    }
+    .menu h1 {
+      margin-top: 30px;
+      font-size: 2.8em;
+      font-weight: 700;
+    }
+    .menu h2 {
+      font-size: 1.4em;
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .gallery {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      padding: 20px;
+    }
+    .gallery img {
+      width: 300px;
+      height: 300px;
+      object-fit: cover;
+      cursor: pointer;
+      border: 12px solid #ccc;
+      border-radius: 8px;
+      transition: 0.3s;
+    }
+    .gallery img:hover {
+      border-color: #0288d1;
+    }
+    #puzzle {
+      width: 450px;
+      height: 450px;
+      margin: 20px auto;
+      display: grid;
+      grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+      gap: 2px;
+    }
+    .tile {
+      width: 150px;
+      height: 150px;
+      background-size: 450px 450px;
+      cursor: pointer;
+    }
+    .empty {
+      background: none;
+      cursor: default;
+    }
+    #timer {
+      font-size: 18px;
+      margin: 10px 0;
+    }
+    #start-btn, #back-btn, #menu-btn, #leaderboard-btn {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 5px;
+      cursor: pointer;
+      font-family: 'Orbitron', sans-serif;
+    }
+    #win-message {
+      margin-top: 20px;
+      font-size: 1.5em;
+      color: green;
+    }
+    #leaderboard {
+      margin-top: 30px;
+    }
+    table {
+      margin: 0 auto;
+      border-collapse: collapse;
+      width: 300px;
+    }
+    th, td {
+      border: 1px solid #444;
+      padding: 8px;
+    }
+    th {
+      background-color: #0288d1;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div id="menu" class="menu">
+    <h1>MagicBlock Puzzle</h1>
+    <h2 style="color: white;">Choose your picture to solve</h2>
+    <div id="gallery" class="gallery">
+      <img src="images/1.jpg" alt="">
+      <img src="images/2.jpg" alt="">
+      <img src="images/3.jpg" alt="">
+      <img src="images/4.jpg" alt="">
+      <img src="images/5.jpg" alt="">
+      <img src="images/6.jpg" alt="">
+      <img src="images/7.jpg" alt="">
+      <img src="images/8.jpg" alt="">
+      <img src="images/9.jpg" alt="">
+    </div>
+    <button id="leaderboard-btn">Leaderboard</button>
+  </div>
+
+  <div id="game" class="hidden">
+    <h2 id="puzzle-title">Puzzle Game</h2>
+    <div id="timer">Time: 0s</div>
+    <div id="puzzle"></div>
+    <button id="start-btn">Start</button>
+    <button id="back-btn">Back to Menu</button>
+    <div id="win-message" class="hidden">
+      🎉 Congratulations! You solved the puzzle!<br><br>
+      <input type="text" id="player-name" placeholder="Enter your name" />
+      <button onclick="submitScore()">Submit Score</button>
+    </div>
+  </div>
+
+  <div id="leaderboard" class="hidden">
+    <h2>Leaderboard</h2>
+    <table>
+      <thead>
+        <tr><th>Player</th><th>Time (s)</th></tr>
+      </thead>
+      <tbody id="leaderboard-body"></tbody>
+    </table>
+    <button id="menu-btn">Back to Menu</button>
+  </div>
+
+  <script>
+    const puzzle = document.getElementById('puzzle');
+    const startBtn = document.getElementById('start-btn');
+    const backBtn = document.getElementById('back-btn');
+    const menuBtn = document.getElementById('menu-btn');
+    const leaderboardBtn = document.getElementById('leaderboard-btn');
+    const leaderboardBody = document.getElementById('leaderboard-body');
+    const timerEl = document.getElementById('timer');
+    const winMessage = document.getElementById('win-message');
+    const game = document.getElementById('game');
+    const menu = document.getElementById('menu');
+    const gallery = document.getElementById('gallery');
+    const title = document.getElementById('puzzle-title');
+    const leaderboard = document.getElementById('leaderboard');
+
+    let currentImage = '';
+    let board = [];
+    let emptyIndex = 8;
+    let timer = 0;
+    let timerInterval;
+    let playing = false;
+    let scoreSubmitted = false;
+
+    function createBoard(image) {
+      puzzle.innerHTML = '';
+      for (let i = 0; i < 9; i++) {
+        const div = document.createElement('div');
+        div.className = 'tile';
+        if (board[i] !== null) {
+          const row = Math.floor(board[i] / 3);
+          const col = board[i] % 3;
+          div.style.backgroundImage = `url('${image}')`;
+          div.style.backgroundPosition = `-${col * 150}px -${row * 150}px`;
+          div.dataset.index = i;
+          div.addEventListener('click', () => tryMove(i));
+        } else {
+          div.classList.add('empty');
+        }
+        puzzle.appendChild(div);
+      }
+    }
+
+    function tryMove(index) {
+      if (!playing) return;
+      const validMoves = [index - 1, index + 1, index - 3, index + 3];
+      if (validMoves.includes(emptyIndex) && isAdjacent(index, emptyIndex)) {
+        [board[index], board[emptyIndex]] = [board[emptyIndex], board[index]];
+        emptyIndex = index;
+        createBoard(currentImage);
+        if (checkWin() && !scoreSubmitted) {
+          clearInterval(timerInterval);
+          winMessage.classList.remove('hidden');
+          playing = false;
+        }
+      }
+    }
+
+    function isAdjacent(i, j) {
+      const row1 = Math.floor(i / 3), col1 = i % 3;
+      const row2 = Math.floor(j / 3), col2 = j % 3;
+      return Math.abs(row1 - row2) + Math.abs(col1 - col2) === 1;
+    }
+
+    function shuffle(arr) {
+      do {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+      } while (!isSolvable(arr));
+    }
+
+    function isSolvable(arr) {
+      let inv = 0;
+      const tiles = arr.filter(n => n !== null);
+      for (let i = 0; i < tiles.length - 1; i++) {
+        for (let j = i + 1; j < tiles.length; j++) {
+          if (tiles[i] > tiles[j]) inv++;
+        }
+      }
+      return inv % 2 === 0;
+    }
+
+    function startGame() {
+      board = [...Array(8).keys()];
+      board.push(null);
+      shuffle(board);
+      emptyIndex = board.indexOf(null);
+      createBoard(currentImage);
+      clearInterval(timerInterval);
+      timer = 0;
+      timerEl.textContent = 'Time: 0s';
+      winMessage.classList.add('hidden');
+      scoreSubmitted = false;
+      timerInterval = setInterval(() => {
+        timer++;
+        timerEl.textContent = `Time: ${timer}s`;
+      }, 1000);
+      playing = true;
+    }
+
+    function checkWin() {
+      for (let i = 0; i < 8; i++) {
+        if (board[i] !== i) return false;
+      }
+      return true;
+    }
+
+    function submitScore() {
+      if (scoreSubmitted) return;
+      const name = document.getElementById('player-name').value || 'Anonymous';
+      const scores = JSON.parse(localStorage.getItem('fairblockScores')) || [];
+      scores.push({ name, time: timer });
+      scores.sort((a, b) => a.time - b.time);
+      localStorage.setItem('fairblockScores', JSON.stringify(scores));
+      renderLeaderboard();
+      scoreSubmitted = true;
+    }
+
+    function renderLeaderboard() {
+      leaderboardBody.innerHTML = '';
+      const scores = JSON.parse(localStorage.getItem('fairblockScores')) || [];
+      scores.forEach(({ name, time }) => {
+        const row = document.createElement('tr');
+        const nameCell = document.createElement('td');
+        const timeCell = document.createElement('td');
+        nameCell.textContent = name;
+        timeCell.textContent = time;
+        row.appendChild(nameCell);
+        row.appendChild(timeCell);
+        leaderboardBody.appendChild(row);
+      });
+    }
+
+    gallery.querySelectorAll('img').forEach(img => {
+      img.addEventListener('click', () => {
+        currentImage = img.src;
+        title.textContent = 'Puzzle Game';
+        menu.classList.add('hidden');
+        game.classList.remove('hidden');
+      });
+    });
+
+    startBtn.addEventListener('click', startGame);
+
+    backBtn.addEventListener('click', () => {
+      clearInterval(timerInterval);
+      game.classList.add('hidden');
+      menu.classList.remove('hidden');
+      puzzle.innerHTML = '';
+      timerEl.textContent = 'Time: 0s';
+      winMessage.classList.add('hidden');
+      playing = false;
+    });
+
+    leaderboardBtn.addEventListener('click', () => {
+      renderLeaderboard();
+      menu.classList.add('hidden');
+      leaderboard.classList.remove('hidden');
+    });
+
+    menuBtn.addEventListener('click', () => {
+      leaderboard.classList.add('hidden');
+      menu.classList.remove('hidden');
+    });
+  </script>
+</body>
+</html>
+<script type="module">
+  import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+  const supabaseUrl = "https://ubnloblugdmvuwsydadp.supabase.co";
+  const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVibmxvYmx1Z2RtdnV3c3lkYWRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzNjg4MTMsImV4cCI6MjA2ODk0NDgxM30.j8sF9LZ-AlPmq25hruGUdAFuSVzkMBLmn_ooDVa6qYU";
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const leaderboardElement = document.getElementById("leaderboard");
+  const leaderboardList = document.getElementById("leaderboard-list");
+
+  async function saveScore(name, time) {
+    const { error } = await supabase.from("leaderboard").insert([{ name, time }]);
+    if (error) {
+      alert("Error saving score: " + error.message);
+    }
+  }
+
+  async function loadLeaderboard() {
+    const { data, error } = await supabase
+      .from("leaderboard")
+      .select("*")
+      .order("time", { ascending: true })
+      .limit(10);
+
+    leaderboardList.innerHTML = "";
+    if (data) {
+      data.forEach((entry, i) => {
+        const li = document.createElement("li");
+        li.textContent = `${i + 1}. ${entry.name} - ${entry.time}s`;
+        leaderboardList.appendChild(li);
+      });
+    }
+  }
+
+  window.saveScore = saveScore;
+  window.loadLeaderboard = loadLeaderboard;
+
+  document.getElementById("show-leaderboard").addEventListener("click", () => {
+  leaderboardElement.style.display = "block";
+  loadLeaderboard(); // ← это правильно
+});
+
+
+  document.getElementById("back-to-menu-from-leaderboard").addEventListener("click", () => {
+    leaderboardElement.style.display = "none";
+  });
+</script>
+<div id="vanta-bg"></div>
